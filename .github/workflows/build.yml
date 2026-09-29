@@ -37,15 +37,18 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.decision.outputs.build }}
+      image: ${{ steps.image.outputs.image }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.resolve.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - id: decision
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.resolve.outputs.tag }}
         run: scripts/build-needed "$TAG" >> "$GITHUB_OUTPUT"
+      - id: image
+        run: scripts/image-needed "$TAG" >> "$GITHUB_OUTPUT"
 
   build:
     needs: [resolve, decide]
@@ -90,3 +93,20 @@ jobs:
           REBUILD_VERSION: ${{ needs.resolve.outputs.rebuild-version }}
           SID_VERSION: ${{ needs.resolve.outputs.sid-version }}
         run: scripts/publish-release "$TAG" "$REBUILD_VERSION" "$SID_VERSION" dist
+
+  image:
+    needs: [resolve, decide, release]
+    if: always() && needs.decide.outputs.image == 'true' && (needs.release.result == 'success' || needs.decide.outputs.build == 'false')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          REBUILD_VERSION: ${{ needs.resolve.outputs.rebuild-version }}
+        run: scripts/publish-image "$TAG" "$REBUILD_VERSION"

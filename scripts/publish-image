@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+tag="$1"
+git_version="$2"
+image="ghcr.io/${GITHUB_REPOSITORY}"
+assets="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[] | "\(.name) \(.digest)"')"
+
+release_asset() {
+    local pattern="$1"
+    local matches
+    matches="$(awk -v pattern="$pattern" '$1 ~ pattern' <<< "$assets")"
+
+    if [ -z "$matches" ]; then
+        printf 'release %s carries no asset matching %s\n' "$tag" "$pattern" >&2
+        exit 1
+    fi
+
+    if [[ "$matches" == *$'\n'* ]]; then
+        printf 'release %s carries several assets matching %s:\n%s\n' "$tag" "$pattern" "$matches" >&2
+        exit 1
+    fi
+
+    printf '%s\n' "$matches"
+}
+
+git_asset="$(release_asset '^git_[^_]+_amd64[.]deb$')"
+git_man_asset="$(release_asset '^git-man_[^_]+_all[.]deb$')"
+read -r git_deb git_digest <<< "$git_asset"
+read -r git_man_deb git_man_digest <<< "$git_man_asset"
+
+docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<< "$GH_TOKEN"
+docker buildx build \
+    --push \
+    --build-arg RELEASE_TAG="$tag" \
+    --build-arg GIT_DEB="$git_deb" \
+    --build-arg GIT_DEB_SHA256="${git_digest#sha256:}" \
+    --build-arg GIT_MAN_DEB="$git_man_deb" \
+    --build-arg GIT_MAN_DEB_SHA256="${git_man_digest#sha256:}" \
+    --build-arg GIT_VERSION="$git_version" \
+    --tag "${image}:${tag}" \
+    --tag "${image}:latest" \
+    .
+
+digest="$(docker buildx imagetools inspect "${image}:${tag}" --format '{{.Manifest.Digest}}')"
+record="$(mktemp --directory)/container-image.txt"
+printf '%s:%s@%s\n' "$image" "$tag" "$digest" > "$record"
+gh release upload "$tag" "$record" --repo "$GITHUB_REPOSITORY"

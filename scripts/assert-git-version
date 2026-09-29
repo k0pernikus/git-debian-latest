@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+expected="$1"
+installed="$(dpkg-query --show --showformat="\${source:Package} \${Package} \${Version}\n")"
+git_packages="$(awk '$1 == "git" { print $2 " " $3 }' <<< "$installed")"
+
+if [ -z "$git_packages" ]; then
+    printf 'no installed package is built from the git source\n' >&2
+    exit 1
+fi
+
+mismatched="$(awk -v expected="$expected" '$2 != expected' <<< "$git_packages")"
+
+if [ -n "$mismatched" ]; then
+    printf 'installed packages built from the git source at a version other than %s:\n%s\n' "$expected" "$mismatched" >&2
+    exit 1
+fi
+
+printf '%s\n' "$git_packages"

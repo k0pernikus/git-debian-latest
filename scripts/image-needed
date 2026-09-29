@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+tag="$1"
+released="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[].tag_name')"
+
+if [[ $'\n'"${released}"$'\n' != *$'\n'"${tag}"$'\n'* ]]; then
+    printf 'image=true\n'
+    exit 0
+fi
+
+assets="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+
+if [[ $'\n'"${assets}"$'\n' == *$'\n'"container-image.txt"$'\n'* ]]; then
+    printf 'release %s already records its container image\n' "$tag" >&2
+    printf 'image=false\n'
+    exit 0
+fi
+
+printf 'image=true\n'
