@@ -3,12 +3,19 @@
 set -euo pipefail
 
 archive="$(realpath "$1")"
-shard="$2"
-shards="$3"
-tree="$(mktemp --directory)"
+tree="$(realpath --canonicalize-missing "$2")"
+shard="$3"
+shards="$4"
 build_dependencies="$(mktemp --directory)"
 
+mkdir --parents "$tree"
 tar --extract --zstd --file "$archive" --directory "$tree"
+template_dir="$(sed --quiet "s/^GIT_TEST_TEMPLATE_DIR='\\(.*\\)'$/\\1/p" "${tree}/GIT-BUILD-OPTIONS")"
+
+if [ ! -d "$template_dir" ]; then
+    printf 'GIT-BUILD-OPTIONS names the template directory %s, absent after unpacking into %s: the tree must be unpacked where it was built\n' "$template_dir" "$tree" >&2
+    exit 1
+fi
 
 cd "$build_dependencies"
 mk-build-deps --install --remove --tool 'apt-get --yes --no-install-recommends' "${tree}/debian/control"

@@ -111,6 +111,7 @@ jobs:
     env:
       DEBIAN_FRONTEND: noninteractive
       SHARD: ${{ matrix.shard }}
+      UPSTREAM_VERSION: ${{ inputs.upstream-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -120,7 +121,7 @@ jobs:
         with:
           name: tree-${{ inputs.tag }}
           path: tree
-      - run: scripts/run-test-shard tree/tree.tar.zst "$SHARD" 4
+      - run: scripts/run-test-shard tree/tree.tar.zst "work/git-${UPSTREAM_VERSION}" "$SHARD" 4
 
   verify:
     needs: [build-arch, build-indep, test]
