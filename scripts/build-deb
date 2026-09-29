@@ -3,10 +3,13 @@
 set -euo pipefail
 
 sid_version="$1"
-rebuild_version="$2"
-output="$(realpath --canonicalize-missing "$3")"
+upstream="$2"
+rebuild_version="$3"
+output="$(realpath --canonicalize-missing "$4")"
+self="$(realpath "$0")"
+scripts="$(dirname "$self")"
 sid_without_epoch="${sid_version#*:}"
-upstream="${sid_without_epoch%-*}"
+sid_upstream="${sid_without_epoch%-*}"
 rebuild_without_epoch="${rebuild_version#*:}"
 sources="$(mktemp --directory)"
 build_dependencies="$(mktemp --directory)"
@@ -14,12 +17,20 @@ build_dependencies="$(mktemp --directory)"
 cd "$sources"
 apt-get source --only-source "git=${sid_version}"
 tree="${sources}/git-${upstream}"
+changelog_entry="Rebuild of the Debian unstable source package for Debian trixie."
+
+if [ "$upstream" != "$sid_upstream" ]; then
+    "${scripts}/fetch-upstream-tarball" "$upstream" "$sources"
+    tar --extract --file "${sources}/git_${upstream}.orig.tar.xz" --directory "$sources"
+    cp --recursive "${sources}/git-${sid_upstream}/debian" "${tree}/debian"
+    changelog_entry="New upstream release ${upstream} from kernel.org, packaged with the packaging of the Debian unstable git ${sid_version}."
+fi
 
 cd "$build_dependencies"
 mk-build-deps --install --remove --tool 'apt-get --yes --no-install-recommends' "${tree}/debian/control"
 
 cd "$tree"
-dch --newversion "$rebuild_version" --force-bad-version --distribution trixie 'Rebuild of the Debian unstable source package for Debian trixie.'
+dch --newversion "$rebuild_version" --force-bad-version --distribution trixie "$changelog_entry"
 changelog_version="$(dpkg-parsechangelog --show-field Version)"
 
 if [ "$changelog_version" != "$rebuild_version" ]; then

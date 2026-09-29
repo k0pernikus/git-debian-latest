@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+upstream="$1"
+destination="$2"
+base="https://www.kernel.org/pub/software/scm/git"
+tarball="git-${upstream}.tar.xz"
+download="$(mktemp --directory)"
+
+curl --fail --silent --show-error --location --output "${download}/${tarball}" "${base}/${tarball}"
+sums="$(curl --fail --silent --show-error --location "${base}/sha256sums.asc")"
+wanted="$(grep --extended-regexp "^[0-9a-f]{64}  ${tarball//./[.]}\$" <<< "$sums")"
+
+cd "$download"
+sha256sum --check --strict <<< "$wanted"
+mv "${download}/${tarball}" "${destination}/git_${upstream}.orig.tar.xz"

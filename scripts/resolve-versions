@@ -5,9 +5,23 @@ set -euo pipefail
 self="$(realpath "$0")"
 scripts="$(dirname "$self")"
 sid_version="$("${scripts}/sid-version")"
-rebuild_version="${sid_version}~trixie1"
-rebuild_without_epoch="${rebuild_version#*:}"
+upstream_version="$("${scripts}/upstream-version")"
+epoch="${sid_version%%:*}"
+sid_without_epoch="${sid_version#*:}"
+sid_upstream="${sid_without_epoch%-*}"
 
-printf 'sid-version=%s\n' "$sid_version"
-printf 'rebuild-version=%s\n' "$rebuild_version"
-printf 'tag=%s\n' "${rebuild_without_epoch//\~/-}"
+build_entry() {
+    local upstream="$1"
+    local rebuild="$2"
+    local rebuild_without_epoch="${rebuild#*:}"
+    printf '{"sid_version":"%s","upstream_version":"%s","rebuild_version":"%s","tag":"%s"}' \
+        "$sid_version" "$upstream" "$rebuild" "${rebuild_without_epoch//\~/-}"
+}
+
+builds="$(build_entry "$sid_upstream" "${sid_version}~trixie1")"
+
+if dpkg --compare-versions "$upstream_version" gt "$sid_upstream"; then
+    builds="${builds},$(build_entry "$upstream_version" "${epoch}:${upstream_version}-0~trixie1")"
+fi
+
+printf 'builds=[%s]\n' "$builds"

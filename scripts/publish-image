@@ -30,6 +30,14 @@ git_man_asset="$(release_asset '^git-man_[^_]+_all[.]deb$')"
 read -r git_deb git_digest <<< "$git_asset"
 read -r git_man_deb git_man_digest <<< "$git_man_asset"
 
+released="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[].tag_name')"
+newest="$(sort --version-sort <<< "$released" | sed --quiet '$p')"
+tags=(--tag "${image}:${tag}")
+
+if [ "$newest" = "$tag" ]; then
+    tags+=(--tag "${image}:latest")
+fi
+
 docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<< "$GH_TOKEN"
 docker buildx build \
     --push \
@@ -39,8 +47,7 @@ docker buildx build \
     --build-arg GIT_MAN_DEB="$git_man_deb" \
     --build-arg GIT_MAN_DEB_SHA256="${git_man_digest#sha256:}" \
     --build-arg GIT_VERSION="$git_version" \
-    --tag "${image}:${tag}" \
-    --tag "${image}:latest" \
+    "${tags[@]}" \
     .
 
 digest="$(docker buildx imagetools inspect "${image}:${tag}" --format '{{.Manifest.Digest}}')"

@@ -5,14 +5,21 @@ set -euo pipefail
 tag="$1"
 rebuild_version="$2"
 sid_version="$3"
-dist="$4"
+upstream="$4"
+dist="$5"
 files=("$dist"/*)
+sid_without_epoch="${sid_version#*:}"
+notes="The Debian unstable git source package ${sid_version}, rebuilt on Debian trixie as ${rebuild_version}. Every binary package and the full source package are attached."
+
+if [ "$upstream" != "${sid_without_epoch%-*}" ]; then
+    notes="git ${upstream} from kernel.org, packaged with the packaging of the Debian unstable git source package ${sid_version} and built on Debian trixie as ${rebuild_version}. Every binary package and the full source package are attached."
+fi
 
 gh release create "$tag" \
     --repo "$GITHUB_REPOSITORY" \
     --target "$GITHUB_SHA" \
     --title "git ${rebuild_version} for Debian trixie" \
-    --notes "The Debian unstable git source package ${sid_version}, rebuilt on Debian trixie as ${rebuild_version}. Every binary package and the full source package are attached." \
+    --notes "$notes" \
     "${files[@]}"
 
 uploaded="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')"

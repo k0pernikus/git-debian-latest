@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+listing="$(curl --fail --silent --show-error --location https://www.kernel.org/pub/software/scm/git/)"
+tarballs="$(grep --only-matching --extended-regexp 'git-[0-9]+[.][0-9]+[.][0-9]+[.]tar[.]xz' <<< "$listing")"
+versions="$(sed 's/^git-//; s/[.]tar[.]xz$//' <<< "$tarballs" | sort --version-sort --unique)"
+newest="$(sed --quiet '$p' <<< "$versions")"
+
+if [ -z "$newest" ]; then
+    printf 'no git release tarball listed on kernel.org\n' >&2
+    exit 1
+fi
+
+printf '%s\n' "$newest"
