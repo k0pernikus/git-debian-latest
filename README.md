@@ -13,7 +13,7 @@ The packages link against trixie's own libraries, so they install with no packag
 
 ## How a build runs
 
-`.github/workflows/build.yml` runs daily and on manual dispatch. Its jobs, in order:
+`.github/workflows/build.yml` runs on every push to `main` and on manual dispatch. Its jobs, in order:
 
 1. `resolve` reads the version of the `git` source package in Debian unstable and the newest release on
    kernel.org, and emits one build per track.
@@ -23,7 +23,8 @@ The packages link against trixie's own libraries, so they install with no packag
 1. `build` downloads the source package in a `debian:trixie-slim` container. On the upstream track it replaces the
    tarball with kernel.org's, verified against kernel.org's `sha256sums.asc`. It installs the build dependencies
    from trixie, adds a changelog entry for the rebuild version, then builds every binary package and runs git's
-   test suite.
+   test suite. It then installs its own `git` and `git-man` and fails when they do not install together or when any
+   package built from the `git` source carries another version, so a broken pair is never released.
 1. `release` publishes a GitHub release carrying every binary package and the full source package.
 1. `image` builds the [`Dockerfile`](Dockerfile) from the released packages, pushes it to the GitHub container
    registry, and attaches `container-image.txt` to the release, naming the image by tag and digest.
@@ -34,8 +35,11 @@ A rebuild of the sid version `1:2.55.0-1` gets the version `1:2.55.0-1~trixie1` 
 `2.55.0-1-trixie1`. The `~` sorts the rebuild below the sid version it came from and above trixie's
 `1:2.47.3-0+deb13u1`.
 
-The upstream release 2.56.0 gets the version `1:2.56.0-0~trixie1` and the tag `2.56.0-0-trixie1`. The Debian
-revision `0` sorts it below the `1:2.56.0-1` that sid will carry once it packages that release.
+The upstream release 2.56.0 gets the version `1:2.56.0-0.1~trixie1` and the tag `2.56.0-0.1-trixie1`, following
+Debian's convention for a new upstream version packaged by someone other than the maintainer. The revision must sort
+above a bare `1:2.56.0`, because Debian's packaging makes `git` depend on `git-man (>> 1:2.56.0)`, and below the
+`1:2.56.0-1` that sid will carry once it packages that release. A revision of `0~trixie1` fails the first condition:
+`~` sorts before the end of the string.
 
 ## Install
 

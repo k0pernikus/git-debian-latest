@@ -21,7 +21,7 @@ build_entry() {
 builds="$(build_entry "$sid_upstream" "${sid_version}~trixie1")"
 
 if dpkg --compare-versions "$upstream_version" gt "$sid_upstream"; then
-    builds="${builds},$(build_entry "$upstream_version" "${epoch}:${upstream_version}-0~trixie1")"
+    builds="${builds},$(build_entry "$upstream_version" "${epoch}:${upstream_version}-0.1~trixie1")"
 fi
 
 printf 'builds=[%s]\n' "$builds"

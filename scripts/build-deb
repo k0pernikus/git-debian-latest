@@ -38,7 +38,7 @@ if [ "$changelog_version" != "$rebuild_version" ]; then
     exit 1
 fi
 
-DEB_BUILD_OPTIONS="parallel=$(nproc)" dpkg-buildpackage --build=full --no-sign
+DEB_BUILD_OPTIONS="terse parallel=$(nproc)" dpkg-buildpackage --build=full --no-sign
 
 cd "$sources"
 mkdir --parents "$output"
@@ -50,3 +50,6 @@ cp \
     ./git_"${rebuild_without_epoch}"_*.buildinfo \
     ./git_"${rebuild_without_epoch}"_*.changes \
     "$output"/
+
+apt-get install --yes --no-install-recommends "$output"/git_"${rebuild_without_epoch}"_amd64.deb "$output"/git-man_"${rebuild_without_epoch}"_all.deb
+"${scripts}/assert-git-version" "$rebuild_version"
