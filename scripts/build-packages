@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+part="$1"
+upstream="$2"
+rebuild_version="$3"
+workdir="$(realpath "$4")"
+output="$(realpath --canonicalize-missing "$5")"
+rebuild_without_epoch="${rebuild_version#*:}"
+tree="${workdir}/git-${upstream}"
+
+case "$part" in
+    arch)
+        build="source,any"
+        suffix="amd64"
+        ;;
+    indep)
+        build="all"
+        suffix="all"
+        ;;
+    *)
+        printf 'unknown part %s, expected arch or indep\n' "$part" >&2
+        exit 1
+        ;;
+esac
+
+cd "$tree"
+DEB_BUILD_OPTIONS="nocheck terse parallel=$(nproc)" dpkg-buildpackage --build="$build" --no-sign
+
+cd "$workdir"
+mkdir --parents "$output"
+cp \
+    ./*_"${rebuild_without_epoch}"_"${suffix}".deb \
+    ./git_"${rebuild_without_epoch}"_"${suffix}".buildinfo \
+    ./git_"${rebuild_without_epoch}"_"${suffix}".changes \
+    "$output"/
+
+if [ "$part" = "arch" ]; then
+    cp \
+        ./git_"${rebuild_without_epoch}".dsc \
+        ./git_"${rebuild_without_epoch}".debian.tar.* \
+        ./git_"${upstream}".orig.tar.* \
+        "$output"/
+fi

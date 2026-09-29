@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+rebuild_version="$1"
+dist="$(realpath "$2")"
+self="$(realpath "$0")"
+scripts="$(dirname "$self")"
+rebuild_without_epoch="${rebuild_version#*:}"
+
+apt-get update
+apt-get install --yes --no-install-recommends \
+    "${dist}/git_${rebuild_without_epoch}_amd64.deb" \
+    "${dist}/git-man_${rebuild_without_epoch}_all.deb"
+"${scripts}/assert-git-version" "$rebuild_version"

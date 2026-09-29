@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+upstream="$1"
+workdir="$(realpath "$2")"
+archive="$(realpath --canonicalize-missing "$3")"
+
+mkdir --parents "$(dirname "$archive")"
+tar --create --zstd --file "$archive" \
+    --directory "${workdir}/git-${upstream}" \
+    --exclude='*.o' \
+    --exclude=./debian/git \
+    --exclude=./debian/.debhelper \
+    .

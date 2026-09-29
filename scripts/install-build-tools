@@ -3,4 +3,4 @@
 set -euo pipefail
 
 apt-get update
-apt-get install --yes --no-install-recommends build-essential ca-certificates curl devscripts dpkg-dev equivs
+apt-get install --yes --no-install-recommends build-essential ca-certificates curl devscripts dpkg-dev equivs zstd

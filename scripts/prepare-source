@@ -5,24 +5,23 @@ set -euo pipefail
 sid_version="$1"
 upstream="$2"
 rebuild_version="$3"
-output="$(realpath --canonicalize-missing "$4")"
+workdir="$(realpath --canonicalize-missing "$4")"
 self="$(realpath "$0")"
 scripts="$(dirname "$self")"
 sid_without_epoch="${sid_version#*:}"
 sid_upstream="${sid_without_epoch%-*}"
-rebuild_without_epoch="${rebuild_version#*:}"
-sources="$(mktemp --directory)"
 build_dependencies="$(mktemp --directory)"
 
-cd "$sources"
+mkdir --parents "$workdir"
+cd "$workdir"
 apt-get source --only-source "git=${sid_version}"
-tree="${sources}/git-${upstream}"
+tree="${workdir}/git-${upstream}"
 changelog_entry="Rebuild of the Debian unstable source package for Debian trixie."
 
 if [ "$upstream" != "$sid_upstream" ]; then
-    "${scripts}/fetch-upstream-tarball" "$upstream" "$sources"
-    tar --extract --file "${sources}/git_${upstream}.orig.tar.xz" --directory "$sources"
-    cp --recursive "${sources}/git-${sid_upstream}/debian" "${tree}/debian"
+    "${scripts}/fetch-upstream-tarball" "$upstream" "$workdir"
+    tar --extract --file "${workdir}/git_${upstream}.orig.tar.xz" --directory "$workdir"
+    cp --recursive "${workdir}/git-${sid_upstream}/debian" "${tree}/debian"
     changelog_entry="New upstream release ${upstream} from kernel.org, packaged with the packaging of the Debian unstable git ${sid_version}."
 fi
 
@@ -37,19 +36,3 @@ if [ "$changelog_version" != "$rebuild_version" ]; then
     printf 'debian/changelog carries version %s, expected %s\n' "$changelog_version" "$rebuild_version" >&2
     exit 1
 fi
-
-DEB_BUILD_OPTIONS="terse parallel=$(nproc)" dpkg-buildpackage --build=full --no-sign
-
-cd "$sources"
-mkdir --parents "$output"
-cp \
-    ./*_"${rebuild_without_epoch}"_*.deb \
-    ./git_"${rebuild_without_epoch}".dsc \
-    ./git_"${rebuild_without_epoch}".debian.tar.* \
-    ./git_"${upstream}".orig.tar.* \
-    ./git_"${rebuild_without_epoch}"_*.buildinfo \
-    ./git_"${rebuild_without_epoch}"_*.changes \
-    "$output"/
-
-apt-get install --yes --no-install-recommends "$output"/git_"${rebuild_without_epoch}"_amd64.deb "$output"/git-man_"${rebuild_without_epoch}"_all.deb
-"${scripts}/assert-git-version" "$rebuild_version"

@@ -41,7 +41,7 @@ jobs:
       - id: image
         run: scripts/image-needed "$TAG" >> "$GITHUB_OUTPUT"
 
-  build:
+  build-arch:
     needs: decide
     if: needs.decide.outputs.build == 'true'
     runs-on: ubuntu-latest
@@ -59,15 +59,89 @@ jobs:
           persist-credentials: false
       - run: scripts/install-build-tools
       - run: scripts/enable-sid-sources
-      - run: scripts/build-deb "$SID_VERSION" "$UPSTREAM_VERSION" "$REBUILD_VERSION" dist
+      - run: scripts/prepare-source "$SID_VERSION" "$UPSTREAM_VERSION" "$REBUILD_VERSION" work
+      - run: scripts/build-packages arch "$UPSTREAM_VERSION" "$REBUILD_VERSION" work dist
+      - run: scripts/pack-test-tree "$UPSTREAM_VERSION" work tree/tree.tar.zst
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: packages-${{ inputs.tag }}
+          name: packages-arch-${{ inputs.tag }}
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: tree-${{ inputs.tag }}
+          path: tree/tree.tar.zst
+          if-no-files-found: error
+          compression-level: 0
+
+  build-indep:
+    needs: decide
+    if: needs.decide.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      DEBFULLNAME: Philipp Kretzschmar
+      DEBEMAIL: philipp.kretzschmar@gmail.com
+      SID_VERSION: ${{ inputs.sid-version }}
+      UPSTREAM_VERSION: ${{ inputs.upstream-version }}
+      REBUILD_VERSION: ${{ inputs.rebuild-version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: scripts/install-build-tools
+      - run: scripts/enable-sid-sources
+      - run: scripts/prepare-source "$SID_VERSION" "$UPSTREAM_VERSION" "$REBUILD_VERSION" work
+      - run: scripts/build-packages indep "$UPSTREAM_VERSION" "$REBUILD_VERSION" work dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: packages-indep-${{ inputs.tag }}
           path: dist/
           if-no-files-found: error
 
+  test:
+    needs: build-arch
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: scripts/install-build-tools
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: tree-${{ inputs.tag }}
+          path: tree
+      - run: scripts/run-test-shard tree/tree.tar.zst "$SHARD" 4
+
+  verify:
+    needs: [build-arch, build-indep, test]
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      REBUILD_VERSION: ${{ inputs.rebuild-version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: packages-*-${{ inputs.tag }}
+          path: dist
+          merge-multiple: true
+      - run: scripts/verify-packages "$REBUILD_VERSION" dist
+
   release:
-    needs: build
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -77,8 +151,9 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: packages-${{ inputs.tag }}
+          pattern: packages-*-${{ inputs.tag }}
           path: dist
+          merge-multiple: true
       - env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}

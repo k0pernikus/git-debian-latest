@@ -20,10 +20,15 @@ The packages link against trixie's own libraries, so they install with no packag
 1. Each build runs [`package.yml`](.github/workflows/package.yml), whose jobs follow.
 1. `decide` lets the build run only when no release carries the tag for that version, and lets the image run
    only when that release does not yet record its container image.
-1. `build` downloads the source package in a `debian:trixie-slim` container. On the upstream track it replaces the
-   tarball with kernel.org's, verified against kernel.org's `sha256sums.asc`. It installs the build dependencies
-   from trixie, adds a changelog entry for the rebuild version, then builds every binary package and runs git's
-   test suite. It then installs its own `git` and `git-man` and fails when they do not install together or when any
+1. `build-arch` and `build-indep` run in parallel in `debian:trixie-slim` containers. Each downloads the source
+   package, and on the upstream track replaces the tarball with kernel.org's, verified against kernel.org's
+   `sha256sums.asc`. Each installs the build dependencies from trixie and adds a changelog entry for the rebuild
+   version. `build-arch` builds the source package and `git`; `build-indep` builds `git-man`, `git-doc` and the other
+   architecture-independent packages. Neither runs the tests.
+1. `test` runs git's test suite against the tree `build-arch` compiled, split round-robin over four parallel jobs.
+   The `git svn` and `git cvsimport` tests are skipped (`NO_SVN_TESTS`, `NO_CVS_TESTS`), so the `git-svn` and
+   `git-cvs` packages are published untested.
+1. `verify` installs the release's own `git` and `git-man` and fails when they do not install together or when any
    package built from the `git` source carries another version, so a broken pair is never released.
 1. `release` publishes a GitHub release carrying every binary package and the full source package.
 1. `image` builds the [`Dockerfile`](Dockerfile) from the released packages, pushes it to the GitHub container

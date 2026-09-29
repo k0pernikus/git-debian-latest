@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+archive="$(realpath "$1")"
+shard="$2"
+shards="$3"
+tree="$(mktemp --directory)"
+build_dependencies="$(mktemp --directory)"
+
+tar --extract --zstd --file "$archive" --directory "$tree"
+
+cd "$build_dependencies"
+mk-build-deps --install --remove --tool 'apt-get --yes --no-install-recommends' "${tree}/debian/control"
+
+cd "${tree}/t"
+mapfile -t scripts < <(printf '%s\n' t[0-9][0-9][0-9][0-9]-*.sh)
+slice=()
+for index in "${!scripts[@]}"; do
+    if [ $((index % shards)) -eq "$shard" ]; then
+        slice+=("${scripts[$index]}")
+    fi
+done
+
+if [ "${#slice[@]}" -eq 0 ]; then
+    printf 'shard %s of %s selects no test script\n' "$shard" "$shards" >&2
+    exit 1
+fi
+
+printf 'shard %s of %s runs %s of %s test scripts\n' "$shard" "$shards" "${#slice[@]}" "${#scripts[@]}"
+
+export GIT_SKIP_TESTS="t9128 t9167"
+export NO_SVN_TESTS=1
+export NO_CVS_TESTS=1
+make --jobs="$(nproc)" --output-sync=target T="${slice[*]}"
+
+if [ "$shard" -eq 0 ]; then
+    make --directory="${tree}/contrib/subtree" test
+fi
