@@ -32,6 +32,7 @@ jobs:
         run: scripts/resolve-versions >> "$GITHUB_OUTPUT"
 
   package:
+    name: git ${{ matrix.build.upstream_version }}
     needs: resolve
     strategy:
       fail-fast: false
