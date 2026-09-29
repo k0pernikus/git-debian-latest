@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+tag="$1"
+rebuild_version="$2"
+sid_version="$3"
+dist="$4"
+files=("$dist"/*)
+
+gh release create "$tag" \
+    --repo "$GITHUB_REPOSITORY" \
+    --target "$GITHUB_SHA" \
+    --title "git ${rebuild_version} for Debian trixie" \
+    --notes "The Debian unstable git source package ${sid_version}, rebuilt on Debian trixie as ${rebuild_version}. Every binary package and the full source package are attached." \
+    "${files[@]}"
+
+uploaded="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length')"
+
+if [ "$uploaded" -ne "${#files[@]}" ]; then
+    printf 'release %s carries %s assets, expected %s\n' "$tag" "$uploaded" "${#files[@]}" >&2
+    exit 1
+fi

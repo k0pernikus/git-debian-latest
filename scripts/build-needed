@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+tag="$1"
+released="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[].tag_name')"
+
+if [[ $'\n'"${released}"$'\n' == *$'\n'"${tag}"$'\n'* ]]; then
+    printf 'release %s exists\n' "$tag" >&2
+    printf 'build=false\n'
+    exit 0
+fi
+
+printf 'build=true\n'

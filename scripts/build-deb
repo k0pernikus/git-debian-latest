@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+sid_version="$1"
+rebuild_version="$2"
+output="$(realpath --canonicalize-missing "$3")"
+sid_without_epoch="${sid_version#*:}"
+upstream="${sid_without_epoch%-*}"
+rebuild_without_epoch="${rebuild_version#*:}"
+sources="$(mktemp --directory)"
+build_dependencies="$(mktemp --directory)"
+
+cd "$sources"
+apt-get source --only-source "git=${sid_version}"
+tree="${sources}/git-${upstream}"
+
+cd "$build_dependencies"
+mk-build-deps --install --remove --tool 'apt-get --yes --no-install-recommends' "${tree}/debian/control"
+
+cd "$tree"
+dch --newversion "$rebuild_version" --force-bad-version --distribution trixie 'Rebuild of the Debian unstable source package for Debian trixie.'
+changelog_version="$(dpkg-parsechangelog --show-field Version)"
+
+if [ "$changelog_version" != "$rebuild_version" ]; then
+    printf 'debian/changelog carries version %s, expected %s\n' "$changelog_version" "$rebuild_version" >&2
+    exit 1
+fi
+
+DEB_BUILD_OPTIONS="parallel=$(nproc)" dpkg-buildpackage --build=full --no-sign
+
+cd "$sources"
+mkdir --parents "$output"
+cp \
+    ./*_"${rebuild_without_epoch}"_*.deb \
+    ./git_"${rebuild_without_epoch}".dsc \
+    ./git_"${rebuild_without_epoch}".debian.tar.* \
+    ./git_"${upstream}".orig.tar.* \
+    ./git_"${rebuild_without_epoch}"_*.buildinfo \
+    ./git_"${rebuild_without_epoch}"_*.changes \
+    "$output"/

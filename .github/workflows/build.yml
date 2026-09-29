@@ -1,0 +1,92 @@
+name: build
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    outputs:
+      sid-version: ${{ steps.versions.outputs.sid-version }}
+      rebuild-version: ${{ steps.versions.outputs.rebuild-version }}
+      tag: ${{ steps.versions.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: scripts/enable-sid-sources
+      - id: versions
+        run: scripts/resolve-versions >> "$GITHUB_OUTPUT"
+
+  decide:
+    needs: resolve
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decision.outputs.build }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - id: decision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: scripts/build-needed "$TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [resolve, decide]
+    if: needs.decide.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    container: debian:trixie-slim
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      DEBFULLNAME: Philipp Kretzschmar
+      DEBEMAIL: philipp.kretzschmar@gmail.com
+      SID_VERSION: ${{ needs.resolve.outputs.sid-version }}
+      REBUILD_VERSION: ${{ needs.resolve.outputs.rebuild-version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: scripts/install-build-tools
+      - run: scripts/enable-sid-sources
+      - run: scripts/build-deb "$SID_VERSION" "$REBUILD_VERSION" dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: packages
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: packages
+          path: dist
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          REBUILD_VERSION: ${{ needs.resolve.outputs.rebuild-version }}
+          SID_VERSION: ${{ needs.resolve.outputs.sid-version }}
+        run: scripts/publish-release "$TAG" "$REBUILD_VERSION" "$SID_VERSION" dist
